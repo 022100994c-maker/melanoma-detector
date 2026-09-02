@@ -18,7 +18,14 @@ def load_artifacts():
 
 
 def preprocess_image(uploaded_file, model):
-    img = Image.open(uploaded_file).convert("RGB")
+    try:
+        uploaded_file.seek(0)
+        with Image.open(uploaded_file) as img:
+            img.verify()
+        uploaded_file.seek(0)
+        img = Image.open(uploaded_file).convert("RGB")
+    except Exception:
+        raise ValueError("El archivo no es una imagen válida. Asegúrate de subir un archivo en formato JPG, JPEG o PNG.")
     img_resized = img.resize((IMG_SIZE, IMG_SIZE))
     img_array = np.array(img_resized).flatten().reshape(1, -1)
     X_scaled = model["scaler"].transform(img_array)
@@ -231,12 +238,16 @@ def main():
 
     uploaded_file = st.file_uploader(
         "Selecciona la imagen",
-        type=["jpg", "jpeg", "png"],
+        type=None,
         label_visibility="collapsed"
     )
 
     if uploaded_file is not None:
-        img, img_resized, X_scaled = preprocess_image(uploaded_file, {"scaler": scaler})
+        try:
+            img, img_resized, X_scaled = preprocess_image(uploaded_file, {"scaler": scaler})
+        except ValueError as e:
+            st.error(str(e))
+            st.stop()
 
         col_preview, col_result = st.columns([1, 1], gap="large")
 
