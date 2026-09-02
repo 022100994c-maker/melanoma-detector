@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.venv/
+venv/
+streamlit/
+
+# Dataset de imágenes (mantener fuera del repo por tamaño)
+train/
+test/
+*.zip
