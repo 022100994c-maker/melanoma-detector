@@ -3,6 +3,7 @@ import numpy as np
 import joblib
 from PIL import Image
 import streamlit as st
+import matplotlib.pyplot as plt
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, "model")
@@ -30,6 +31,47 @@ def preprocess_image(uploaded_file, model):
     img_array = np.array(img_resized).flatten().reshape(1, -1)
     X_scaled = model["scaler"].transform(img_array)
     return img, img_resized, X_scaled
+
+
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+
+def plot_sigmoid(model, z_highlight=None, prob_highlight=None):
+    z = np.linspace(-8, 8, 300)
+    s = sigmoid(z)
+
+    fig, ax = plt.subplots(figsize=(7, 4.5), dpi=110, facecolor='none')
+    ax.plot(z, s, color='#00d2ff', linewidth=3, label='σ(z) = 1/(1+e⁻ᶻ)')
+    ax.axhline(0.5, color='#b8b8d1', linestyle='--', linewidth=1, label='Umbral = 0.5')
+    ax.axvline(0, color='#b8b8d1', linestyle=':', linewidth=1, alpha=0.7)
+    ax.axhline(0, color='#b8b8d1', linestyle='-', linewidth=0.5, alpha=0.4)
+    ax.axhline(1, color='#b8b8d1', linestyle='-', linewidth=0.5, alpha=0.4)
+    ax.set_xlabel('z = β₀ + β₁x₁ + ... + βₙxₙ (score lineal)', color='#d0d0e8')
+    ax.set_ylabel('Probabilidad P(y=1)', color='#d0d0e8')
+    ax.set_title('Función Sigmoide aplicada al modelo', color='#ffffff', fontweight='bold')
+    ax.tick_params(colors='#d0d0e8')
+    for spine in ax.spines.values():
+        spine.set_color('#555577')
+    ax.grid(True, alpha=0.15)
+    ax.legend(loc='center right', facecolor='#24243e', edgecolor='#555577', labelcolor='#ffffff')
+
+    if z_highlight is not None and prob_highlight is not None:
+        ax.scatter([z_highlight], [prob_highlight], color='#ff6b6b', s=90, zorder=5, label=f'Predicción actual (prob = {prob_highlight:.2f})')
+        ax.annotate(f'z = {z_highlight:.2f}\nP = {prob_highlight:.2f}', xy=(z_highlight, prob_highlight),
+                    xytext=(z_highlight + 1.2, prob_highlight - 0.15),
+                    color='#ffffff', fontsize=9,
+                    arrowprops=dict(arrowstyle='->', color='#ff6b6b'))
+        ax.legend(loc='center right', facecolor='#24243e', edgecolor='#555577', labelcolor='#ffffff')
+
+    fig.tight_layout()
+    return fig
+
+
+def compute_z(model, X_scaled):
+    coef = model.coef_[0]
+    intercept = model.intercept_[0]
+    return float(np.dot(X_scaled[0], coef) + intercept)
 
 
 def inject_css():
@@ -188,6 +230,49 @@ def inject_css():
             background: rgba(255,255,255,0.05) !important;
         }
 
+        .formula-box {
+            background: rgba(255,255,255,0.06);
+            border-left: 4px solid #00d2ff;
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin: 1rem 0;
+            font-family: 'Courier New', monospace;
+            font-size: 1.1rem;
+            color: #e0e0ff;
+            text-align: center;
+        }
+
+        .edu-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px;
+            padding: 1.2rem 1.5rem;
+            margin: 0.6rem 0;
+        }
+
+        .edu-card h4 {
+            color: #00d2ff;
+            margin-top: 0;
+            margin-bottom: 0.4rem;
+        }
+
+        .edu-card p, .edu-card li {
+            color: #d0d0e8;
+            font-size: 0.95rem;
+        }
+
+        .badge-sigmoid {
+            display: inline-block;
+            background: rgba(0,210,255,0.15);
+            color: #00d2ff;
+            border-radius: 20px;
+            padding: 0.2rem 0.9rem;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .hide-default {display: none !important;}
+
         /* Hide default Streamlit footer */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
@@ -231,83 +316,166 @@ def main():
     artifacts = load_artifacts()
     model, scaler, label_encoder = artifacts
 
-    st.markdown("""
-    ### 📤 Sube una imagen de la lesión de piel
-    Carga una imagen en formato **JPG, PNG o JPEG** para que el modelo realice el diagnóstico.
-    """)
+    tab_pred, tab_edu = st.tabs(["🔍 Predicción", "📚 ¿Cómo funciona? (Sigmoide)"])
 
-    uploaded_file = st.file_uploader(
-        "Selecciona la imagen",
-        type=None,
-        label_visibility="collapsed"
-    )
+    with tab_pred:
+        st.markdown("""
+        ### 📤 Sube una imagen de la lesión de piel
+        Carga una imagen en formato **JPG, PNG o JPEG** para que el modelo realice el diagnóstico.
+        """)
 
-    if uploaded_file is not None:
-        try:
-            img, img_resized, X_scaled = preprocess_image(uploaded_file, {"scaler": scaler})
-        except ValueError as e:
-            st.error(str(e))
-            st.stop()
+        uploaded_file = st.file_uploader(
+            "Selecciona la imagen",
+            type=None,
+            label_visibility="collapsed"
+        )
 
-        col_preview, col_result = st.columns([1, 1], gap="large")
+        if uploaded_file is not None:
+            try:
+                img, img_resized, X_scaled = preprocess_image(uploaded_file, {"scaler": scaler})
+            except ValueError as e:
+                st.error(str(e))
+                st.stop()
 
-        with col_preview:
-            st.markdown("#### 🖼️ Imagen Cargada")
-            st.image(img, use_container_width=True, caption="Vista original de la lesión")
+            y_pred = model.predict(X_scaled)[0]
+            proba = model.predict_proba(X_scaled)[0]
+            st.session_state["last_result"] = {
+                "z": compute_z(model, X_scaled),
+                "prob_malignant": float(proba[1])
+            }
 
-        with col_result:
-            st.markdown("#### 🧠 Predicción del Modelo")
-            with st.spinner("Analizando la lesión..."):
-                y_pred = model.predict(X_scaled)[0]
-                proba = model.predict_proba(X_scaled)[0]
+            col_preview, col_result = st.columns([1, 1], gap="large")
 
-            prob_benign = proba[0]
-            prob_malignant = proba[1]
-            pred_class = label_encoder.inverse_transform([y_pred])[0]
+            with col_preview:
+                st.markdown("#### 🖼️ Imagen Cargada")
+                st.image(img, use_container_width=True, caption="Vista original de la lesión")
 
-            if pred_class == "Malignant":
-                st.markdown(f"""
-                <div class="pred-card maligno">
-                    <div style="font-size:1rem; opacity:0.9;">DIAGNÓSTICO:</div>
-                    <div class="pred-label">⚠️ MALIGNO</div>
-                    <div class="pred-desc">Lesión detectada como melanoma sospechoso</div>
-                </div>
-                """, unsafe_allow_html=True)
-                st.markdown("""
-                <div class="conf-grid">
-                    <div class="conf-cell"><div class="conf-value">{:.1f}%</div><div class="conf-label">Prob. Maligno</div></div>
-                    <div class="conf-cell"><div class="conf-value">{:.1f}%</div><div class="conf-label">Prob. Benigno</div></div>
-                </div>
-                """.format(prob_malignant * 100, prob_benign * 100), unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div class="pred-card benigno">
-                    <div style="font-size:1rem; opacity:0.9;">DIAGNÓSTICO:</div>
-                    <div class="pred-label">✅ BENIGNO</div>
-                    <div class="pred-desc">Lesión clasificada como no cancerosa</div>
-                </div>
-                """, unsafe_allow_html=True)
-                st.markdown("""
-                <div class="conf-grid">
-                    <div class="conf-cell"><div class="conf-value">{:.1f}%</div><div class="conf-label">Prob. Benigno</div></div>
-                    <div class="conf-cell"><div class="conf-value">{:.1f}%</div><div class="conf-label">Prob. Maligno</div></div>
-                </div>
-                """.format(prob_benign * 100, prob_malignant * 100), unsafe_allow_html=True)
+            with col_result:
+                st.markdown("#### 🧠 Predicción del Modelo")
+                with st.spinner("Analizando la lesión..."):
+                    y_pred = model.predict(X_scaled)[0]
+                    proba = model.predict_proba(X_scaled)[0]
 
-            st.markdown("#### 📊 Nivel de Confianza")
-            if prob_malignant > prob_benign:
-                st.progress(int(prob_malignant * 100))
-                st.caption(f"Confianza del diagnóstico: {prob_malignant:.1%}")
-            else:
-                st.progress(int(prob_benign * 100))
-                st.caption(f"Confianza del diagnóstico: {prob_benign:.1%}")
+                prob_benign = proba[0]
+                prob_malignant = proba[1]
+                pred_class = label_encoder.inverse_transform([y_pred])[0]
 
-        st.info("""
-        **⚠️ Aviso importante:** Este sistema es una herramienta educativa de apoyo al diagnóstico. **No reemplaza la evaluación de un dermatólogo profesional.** Ante cualquier sospecha, consulta a un especialista.
-        """, icon="💡")
+                if pred_class == "Malignant":
+                    st.markdown(f"""
+                    <div class="pred-card maligno">
+                        <div style="font-size:1rem; opacity:0.9;">DIAGNÓSTICO:</div>
+                        <div class="pred-label">⚠️ MALIGNO</div>
+                        <div class="pred-desc">Lesión detectada como melanoma sospechoso</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.markdown("""
+                    <div class="conf-grid">
+                        <div class="conf-cell"><div class="conf-value">{:.1f}%</div><div class="conf-label">Prob. Maligno</div></div>
+                        <div class="conf-cell"><div class="conf-value">{:.1f}%</div><div class="conf-label">Prob. Benigno</div></div>
+                    </div>
+                    """.format(prob_malignant * 100, prob_benign * 100), unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="pred-card benigno">
+                        <div style="font-size:1rem; opacity:0.9;">DIAGNÓSTICO:</div>
+                        <div class="pred-label">✅ BENIGNO</div>
+                        <div class="pred-desc">Lesión clasificada como no cancerosa</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.markdown("""
+                    <div class="conf-grid">
+                        <div class="conf-cell"><div class="conf-value">{:.1f}%</div><div class="conf-label">Prob. Benigno</div></div>
+                        <div class="conf-cell"><div class="conf-value">{:.1f}%</div><div class="conf-label">Prob. Maligno</div></div>
+                    </div>
+                    """.format(prob_benign * 100, prob_malignant * 100), unsafe_allow_html=True)
 
-    else:
-        st.markdown('<div class="upload-area"><div style="font-size: 3.5rem;">🩻</div><br/><b>Sube tu imagen aquí</b><br/><span style="color:#b8b8d1; font-size:0.9rem;">Arrastra y suelta una imagen para comenzar el análisis</span></div>', unsafe_allow_html=True)
+                st.markdown("#### 📊 Nivel de Confianza")
+                if prob_malignant > prob_benign:
+                    st.progress(int(prob_malignant * 100))
+                    st.caption(f"Confianza del diagnóstico: {prob_malignant:.1%}")
+                else:
+                    st.progress(int(prob_benign * 100))
+                    st.caption(f"Confianza del diagnóstico: {prob_benign:.1%}")
+
+            st.info("""
+            **⚠️ Aviso importante:** Este sistema es una herramienta educativa de apoyo al diagnóstico. **No reemplaza la evaluación de un dermatólogo profesional.** Ante cualquier sospecha, consulta a un especialista.
+            """, icon="💡")
+        else:
+            st.markdown('<div class="upload-area"><div style="font-size: 3.5rem;">🩻</div><br/><b>Sube tu imagen aquí</b><br/><span style="color:#b8b8d1; font-size:0.9rem;">Arrastra y suelta una imagen para comenzar el análisis</span></div>', unsafe_allow_html=True)
+
+    with tab_edu:
+        st.markdown('<span class="badge-sigmoid">🧠 Fundamentos del modelo</span>', unsafe_allow_html=True)
+        st.markdown("### ¿Cómo decide el modelo? La función Sigmoide")
+
+        st.markdown("""
+        La **Regresión Logística** no predice directamente la clase, sino la **probabilidad** de que la lesión sea maligna (clase 1). Para ello usa la **función sigmoide** (también llamada función logística):
+        """)
+
+        st.markdown('<div class="formula-box">σ(z) = 1 / (1 + e⁻ᶻ)</div>', unsafe_allow_html=True)
+
+        st.markdown("""
+        donde **z** es una *combinación lineal* de los 3,072 píxeles de la imagen (características):
+
+        <div class="formula-box">z = β₀ + β₁·x₁ + β₂·x₂ + ... + β₃₀₇₂·x₃₀₇₂</div>
+
+        - Los **β** (betas) son los *coeficientes* que el modelo aprendió durante el entrenamiento.
+        - Cada **x** es un píxel de la imagen (ya normalizado con el scaler).
+        - La sigmoide convierte cualquier valor de **z** (de −∞ a +∞) en una **probabilidad entre 0 y 1**.
+        """, unsafe_allow_html=True)
+
+        st.markdown("### 📈 Interpretación de la curva")
+        st.markdown("""
+        <div class="edu-card">
+        <h4>📌 ¿Cómo se interpreta?</h4>
+        <ul>
+            <li>Cuando <strong>z → +∞</strong>, la sigmoide se acerca a <strong>1</strong> (alta probabilidad de maligno).</li>
+            <li>Cuando <strong>z → −∞</strong>, la sigmoide se acerca a <strong>0</strong> (alta probabilidad de benigno).</li>
+            <li>En <strong>z = 0</strong>, la probabilidad es exactamente <strong>0.5</strong> (punto de indecisión).</li>
+            <li>El modelo clasifica como <strong>Maligno</strong> si P(y=1) ≥ 0.5, y como <strong>Benigno</strong> en caso contrario.</li>
+        </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if "last_result" in st.session_state:
+            last = st.session_state["last_result"]
+            st.markdown("### 🖼️ Tu imagen en la curva")
+            st.markdown("""
+            <div class="edu-card">
+            <h4>📍 Posición de tu última predicción</h4>
+            <p>El punto <strong>rojo</strong> en la curva muestra dónde quedó tu imagen según su score lineal <strong>z</strong>. La proyección vertical indica la probabilidad de maligno que el modelo le asignó. Este es exactamente el valor que ves como porcentaje en la pestaña de <strong>Predicción</strong>.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            fig_own = plot_sigmoid(model, z_highlight=last["z"], prob_highlight=last["prob_malignant"])
+            st.pyplot(fig_own)
+            pc1, pc2 = st.columns(2)
+            pc1.metric("z de tu imagen", f"{last['z']:.2f}")
+            pc2.metric("P(maligno) de tu imagen", f"{last['prob_malignant']:.3f}")
+            st.divider()
+            st.markdown("### 🧪 Prueba interactiva manual")
+
+        else:
+            st.markdown("### 🧪 Prueba interactiva manual")
+
+        st.markdown("""
+        <div class="edu-card">
+        <h4>🔍 Interacción</h4>
+        <p>Ajusta el valor de <strong>z</strong> (el score lineal) con el deslizador y observa cómo la curva convierte ese valor en una probabilidad. Así funciona internamente cada predicción que hace el modelo con tus imágenes.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        z_interactive = st.slider("Valor de z (score lineal)", -8.0, 8.0, 0.0, 0.1)
+        prob_interactive = float(sigmoid(z_interactive))
+        fig_inter = plot_sigmoid(model, z_highlight=z_interactive, prob_highlight=prob_interactive)
+        st.pyplot(fig_inter)
+
+        c1, c2 = st.columns(2)
+        c1.metric("z (lineal)", f"{z_interactive:.2f}")
+        c2.metric("Probabilidad P(maligno)", f"{prob_interactive:.3f}")
+
+        if prob_interactive >= 0.5:
+            st.success(f"Clasificación: **MALIGNO** (p = {prob_interactive:.2f} ≥ 0.5)")
+        else:
+            st.success(f"Clasificación: **BENIGNO** (p = {prob_interactive:.2f} < 0.5)")
 
     st.markdown('<div class="footer">Melanoma Detector AI · Proyecto de Machine Learning · Regresión Logística</div>', unsafe_allow_html=True)
 
