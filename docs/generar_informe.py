@@ -15,10 +15,10 @@ PROJECT_DIR = os.path.dirname(BASE_DIR)
 OUTPUT_PDF = os.path.join(PROJECT_DIR, "docs", "Informe_Melanoma_Detector.pdf")
 
 INTEGRANTES = [
-    ("Suárez Condori Juan Gabriel", "022100.."),
-    ("Ramos Ticahuanca Gianella Alexandra", "022100.."),
-    ("Jesus del Aguila Garcia", "022100.."),
-    ("Mendoza Torres Lincol Jhon", "022100.."),
+    "Suárez Condori Juan Gabriel",
+    "Ramos Ticahuanca Gianella Alexandra",
+    "Jesus del Aguila Garcia",
+    "Mendoza Torres Lincol Jhon",
 ]
 
 print("Proyecto:", PROJECT_DIR)
@@ -67,11 +67,11 @@ def build_pdf():
     story.append(Paragraph("<b>INTEGRANTES DEL EQUIPO</b>", style("Center", base="BodyText", fontName="Helvetica-Bold", fontSize=12)))
     story.append(Spacer(1, 0.4*cm))
 
-    integ_data = [[Paragraph("<b>Nombres y Apellidos</b>", style("Cell", base="BodyText", fontName="Helvetica-Bold", fontSize=10)), Paragraph("<b>Código Universitario</b>", style("Cell", base="BodyText", fontName="Helvetica-Bold", fontSize=10))]]
-    for nombre, cod in INTEGRANTES:
-        integ_data.append([Paragraph(nombre, style("Cell", base="BodyText", fontSize=10)), Paragraph(cod, style("Cell", base="BodyText", fontSize=10))])
+    integ_data = [[Paragraph("<b>Nombres y Apellidos</b>", style("Cell", base="BodyText", fontName="Helvetica-Bold", fontSize=10))]]
+    for nombre in INTEGRANTES:
+        integ_data.append([Paragraph(nombre, style("Cell", base="BodyText", fontSize=10))])
 
-    integ_table = Table(integ_data, colWidths=[12*cm, 5.5*cm])
+    integ_table = Table(integ_data, colWidths=[17.5*cm])
     integ_table.setStyle(TableStyle([
         ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#0f3a6b")),
         ("TEXTCOLOR", (0,0), (-1,0), colors.white),
@@ -364,8 +364,6 @@ def build_pdf():
         "El repositorio contiene los scripts de entrenamiento (train_model.py), la aplicación web (app.py), "
         "el modelo entrenado (archivos .pkl) y la documentación.", BODY))
     story.append(Spacer(1, 0.5*cm))
-    story.append(Paragraph(
-        "** Nota: los códigos universitarios de los integrantes deben ser completados con los valores reales.", style("Note", base="BodyText", fontSize=8.5, textColor=colors.HexColor("#888888"))))
 
     doc.build(story)
     print(f"PDF generado con éxito: {OUTPUT_PDF}")
